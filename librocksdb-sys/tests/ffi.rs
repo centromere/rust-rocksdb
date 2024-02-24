@@ -1112,6 +1112,67 @@ fn ffi() {
             rocksdb_destroy_db(options, dbname, &mut err);
         }
 
+        StartPhase("prefix_noop_transformer");
+        {
+            // Create new database
+            rocksdb_options_set_allow_mmap_reads(options, 1);
+            rocksdb_options_set_prefix_extractor(
+                options,
+                //rocksdb_slicetransform_create_fixed_prefix(5),
+                rocksdb_slicetransform_create_noop(),
+            );
+            rocksdb_options_set_allow_concurrent_memtable_write(options, 0);
+
+            db = rocksdb_open(options, dbname, &mut err);
+            CheckNoError!(err);
+
+            rocksdb_put(db, woptions, cstrp!("/bar/a"), 6, cstrp!("bar"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/bar/b"), 6, cstrp!("bar"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/bar/c"), 6, cstrp!("bar"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/foo/a"), 6, cstrp!("foo"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/foo/b"), 6, cstrp!("foo"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/foo/c"), 6, cstrp!("foo"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/zzz/a"), 6, cstrp!("zzz"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/zzz/b"), 6, cstrp!("zzz"), 3, &mut err);
+            CheckNoError!(err);
+            rocksdb_put(db, woptions, cstrp!("/zzz/c"), 6, cstrp!("zzz"), 3, &mut err);
+            CheckNoError!(err);
+
+            rocksdb_readoptions_set_prefix_same_as_start(roptions, 1);
+
+            let mut iter = rocksdb_create_iterator(db, roptions);
+            CheckCondition!(rocksdb_iter_valid(iter) == 0);
+
+            rocksdb_iter_seek(iter, cstrp!("/foo/"), 5);
+            rocksdb_iter_get_error(iter, &mut err);
+            CheckNoError!(err);
+            CheckCondition!(rocksdb_iter_valid(iter) != 0);
+
+            CheckIter(iter, cstrp!("/foo/a"), cstrp!("foo"));
+            rocksdb_iter_next(iter);
+            CheckIter(iter, cstrp!("/foo/b"), cstrp!("foo"));
+            rocksdb_iter_next(iter);
+            CheckIter(iter, cstrp!("/foo/c"), cstrp!("foo"));
+
+            rocksdb_iter_get_error(iter, &mut err);
+            CheckNoError!(err);
+
+            rocksdb_iter_next(iter);
+            CheckCondition!(rocksdb_iter_valid(iter) == 0);
+
+            rocksdb_iter_destroy(iter);
+
+            rocksdb_close(db);
+            rocksdb_destroy_db(options, dbname, &mut err);
+        }
+
         StartPhase("cuckoo_options");
         {
             let mut cuckoo_options = rocksdb_cuckoo_options_create();
